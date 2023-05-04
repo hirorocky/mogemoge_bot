@@ -7,6 +7,9 @@ import json
 
 import openai
 
+openai.organization = "org-9VaiFI9O2Gvr7fqqwpqCWBrK"
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
 misskey_key = os.getenv("MISSKEY_BOT_API_KEY")
 
 character_settings = """
@@ -49,9 +52,6 @@ def note_if_needed(_event, _context):
 
 
 def create_daily_note_text(dt_now):
-    openai.organization = "org-9VaiFI9O2Gvr7fqqwpqCWBrK"
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-
     prompt = """
     今は{month}月{day}日、24時間表記で{hour}時です。
     以下から好きな話題を1つか2つ選んで、10〜100文字程度で話してください。
@@ -107,7 +107,6 @@ def get_latest_reply_note():
     headers = {"Content-Type": "application/json"}
     response = requests.post(url, data=data_encode, headers=headers)
     replies = response.json()
-    print()
     return replies[0]
 
 
