@@ -4,8 +4,12 @@ import random
 import os
 import requests
 import json
-
 import openai
+
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+
+    load_dotenv()
 
 openai.organization = "org-9VaiFI9O2Gvr7fqqwpqCWBrK"
 openai.api_key = os.getenv("OPENAI_API_KEY")

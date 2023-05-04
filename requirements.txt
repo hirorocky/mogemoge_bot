@@ -1,2 +1,3 @@
 functions-framework
-google-cloud-error-reporting
+python-dotenv
+openai
