@@ -80,17 +80,20 @@ def create_daily_note_text(dt_now):
 def create_reply_note_text(reply_note):
     reply_text = reply_note["text"].replace("@mogemoge", "")
     replier_name = reply_note["user"]["username"]
-    original_note = reply_note["reply"]
-    original_note_text = original_note["text"]
+    prompt_messages = [{"role": "system", "content": character_settings}]
+    if "reply" in reply_note:
+        original_note = reply_note["reply"]
+        original_note_text = original_note["text"]
+        prompt_messages.append(
+            {"role": "assistant", "content": original_note_text}
+        )
 
+    prompt_messages.append(
+        {"role": "system", "content": "以下の返信に50文字以内で答えてください"}
+    )
+    prompt_messages.append({"role": "user", "content": reply_text})
     res = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": character_settings},
-            {"role": "assistant", "content": original_note_text},
-            {"role": "system", "content": "以下の返信に50文字以内で答えてください"},
-            {"role": "user", "content": reply_text},
-        ],
+        model="gpt-3.5-turbo", messages=prompt_messages
     )
 
     return "@{mention} {text}".format(
