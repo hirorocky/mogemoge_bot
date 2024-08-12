@@ -4,31 +4,18 @@ import random
 import os
 import requests
 import json
-import openai
+from openai import OpenAI
+import time
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
 
     load_dotenv()
 
-openai.organization = "org-9VaiFI9O2Gvr7fqqwpqCWBrK"
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
+openai_client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+)
 misskey_key = os.getenv("MISSKEY_BOT_API_KEY")
-
-character_settings = """
-あなたはもげもげという名前のおばけのキャラクターです。
-
-## 以下の設定を守ってください
-一人称は僕です。
-年齢は人間でいうと12歳、性別はありません。いたずらが大好きですが、それは人間に構って欲しいからです。
-人間にとても興味があります。
-
-## 注意事項
-人間に構って欲しいということは話さないでください。
-絶対にため口で話してください。
-語尾にできるだけ「もげ」と付けてください。
-"""
 
 
 def note_if_needed(_event, _context):
@@ -45,6 +32,7 @@ def note_if_needed(_event, _context):
     if dt_now.hour == note_hour or os.getenv("FORCED_NOTE") == "true":
         bot_text = create_daily_note_text(dt_now)
         send_to_misskey(bot_text)
+        print("daily note is created.")
 
     latest_reply = get_latest_reply_note()
     if is_reply_required(latest_reply):
@@ -70,38 +58,44 @@ def create_daily_note_text(dt_now):
         month=dt_now.month, day=dt_now.day, hour=dt_now.hour
     )
 
-    res = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": character_settings},
-            {"role": "user", "content": prompt},
-        ],
+    thread = openai_client.beta.threads.create()
+    openai_client.beta.threads.messages.create(
+        thread_id=thread.id,
+        role="user",
+        content=prompt,
     )
 
-    return res["choices"][0]["message"]["content"]
+    return get_assistant_response(thread)
 
 
 def create_reply_note_text(reply_note):
+    thread = openai_client.beta.threads.create()
+
     reply_text = reply_note["text"].replace("@mogemoge", "")
     replier_name = reply_note["user"]["username"]
-    prompt_messages = [{"role": "system", "content": character_settings}]
+
     if "reply" in reply_note:
         original_note = reply_note["reply"]
         original_note_text = original_note["text"]
-        prompt_messages.append(
-            {"role": "assistant", "content": original_note_text}
+        openai_client.beta.threads.messages.create(
+            thread_id=thread.id,
+            role="assistant",
+            content=original_note_text,
         )
 
-    prompt_messages.append(
-        {"role": "system", "content": "以下の返信に50文字以内で答えてください"}
+    openai_client.beta.threads.messages.create(
+        thread_id=thread.id,
+        role="user",
+        content="以下の返信に50文字以内で答えてください",
     )
-    prompt_messages.append({"role": "user", "content": reply_text})
-    res = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo", messages=prompt_messages
+    openai_client.beta.threads.messages.create(
+        thread_id=thread.id,
+        role="user",
+        content=reply_text,
     )
 
     return "@{mention} {text}".format(
-        mention=replier_name, text=res["choices"][0]["message"]["content"]
+        mention=replier_name, text=get_assistant_response(thread)
     )
 
 
@@ -128,6 +122,22 @@ def is_reply_required(note):
         if reply["user"]["username"] == "mogemoge":
             return False
     return True
+
+
+def get_assistant_response(thread):
+    assistants = openai_client.beta.assistants.list()
+    assistant = assistants.data[0]
+    run = openai_client.beta.threads.runs.create(
+        thread_id=thread.id, assistant_id=assistant.id
+    )
+    while run.status == "queued" or run.status == "in_progress":
+        run = openai_client.beta.threads.runs.retrieve(
+            thread_id=thread.id,
+            run_id=run.id,
+        )
+        time.sleep(0.5)
+    messages = openai_client.beta.threads.messages.list(thread_id=thread.id)
+    return messages.data[0].content[0].text.value
 
 
 def send_to_misskey(text, replyId=None):
